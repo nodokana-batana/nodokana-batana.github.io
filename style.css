@@ -1,0 +1,200 @@
+/* =========================================
+   VARIABLES & THEMING
+   ========================================= */
+:root {
+    --bg-overlay: rgba(10, 10, 12, 0.85);
+    --glass-bg: rgba(20, 20, 25, 0.6);
+    --glass-border: rgba(255, 255, 255, 0.1);
+
+    --text-primary: #ffffff;
+    --text-secondary: #a0a0ad;
+
+    --gradient-primary: linear-gradient(135deg, #ff3366 0%, #00c6ff 100%);
+
+    --font-primary: 'Outfit', sans-serif;
+}
+
+/* =========================================
+   BASE STYLES & CANVAS CONTAINMENT
+   ========================================= */
+body,
+html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    /* Prevent scrolling, Three.js canvas fits perfectly */
+    background-color: #000;
+    font-family: var(--font-primary);
+    color: var(--text-primary);
+}
+
+/* =========================================
+   UI OVERLAYS
+   ========================================= */
+#ui-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--bg-overlay);
+    backdrop-filter: blur(10px);
+    z-index: 10;
+    transition: opacity 0.5s ease;
+}
+
+.glass-panel {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    padding: 50px;
+    border-radius: 20px;
+    text-align: center;
+    max-width: 500px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    transition: transform 0.3s ease, border-color 0.3s ease;
+}
+
+.glass-panel:hover {
+    transform: translateY(-5px);
+    border-color: rgba(255, 51, 102, 0.5);
+}
+
+#instructions h1 {
+    font-size: 3rem;
+    margin: 0 0 10px 0;
+    letter-spacing: -1px;
+}
+
+#instructions .subtitle {
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    margin-bottom: 30px;
+}
+
+.controls-hint {
+    margin-top: 30px;
+    font-size: 0.9rem;
+    line-height: 2;
+    color: var(--text-secondary);
+}
+
+.controls-hint span {
+    color: white;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.gradient-text {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* Crosshair for First Person View */
+#crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 30px;
+    font-weight: 300;
+    z-index: 5;
+    pointer-events: none;
+    /* Let clicks pass through to the canvas */
+    display: none;
+    /* Hidden until game starts */
+}
+
+/* Device Selection Buttons */
+.device-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.device-buttons .btn {
+    padding: 15px 20px;
+    border: none;
+    border-radius: 10px;
+    font-family: var(--font-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.device-buttons .btn-primary {
+    background: var(--gradient-primary);
+    color: white;
+}
+
+.device-buttons .btn-primary:active {
+    transform: scale(0.95);
+}
+
+.device-buttons .btn-secondary {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--glass-border);
+}
+
+.device-buttons .btn-secondary:active {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Mobile Touch UI */
+#mobile-ui {
+    position: absolute;
+    inset: 0;
+    z-index: 100;
+    pointer-events: none;
+    /* Only children should receive events */
+}
+
+#joystick-zone {
+    position: absolute;
+    bottom: 50px;
+    left: 50px;
+    width: 150px;
+    height: 150px;
+    background: rgba(255, 255, 255, 0.05);
+    /* very faint guide */
+    border-radius: 50%;
+    pointer-events: auto;
+    /* Catch touch events */
+}
+
+#look-zone {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 50vw;
+    /* Right half of the screen */
+    height: 100vh;
+    pointer-events: auto;
+}
+
+#btn-exit-mobile {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    padding: 10px 20px;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    font-family: var(--font-primary);
+    pointer-events: auto;
+    z-index: 101;
+}

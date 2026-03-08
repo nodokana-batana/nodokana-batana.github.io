@@ -1,269 +1,71 @@
 <!DOCTYPE html>
-<html>
-	<head>
-		<title> Nodokana-Batana Browser App </title>
-		<style> body { margin: 0; } </style>
-	</head>
-	<body>
-        <script async src="https://unpkg.com/es-module-shims@1.3.6/dist/es-module-shims.js"></script>
-        <script type="importmap">
-          {
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>3D Digital Art Museum</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Virtual Joystick Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+
+    <!-- Three.js Import Map -->
+    <!-- We need standard Three.js and the @pixiv/three-vrm library for VRM avatars -->
+    <script type="importmap">
+        {
             "imports": {
-              "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
-              "three/addons/": "https://unpkg.com/three@0.162.0/examples/jsm/"
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "@pixiv/three-vrm": "https://unpkg.com/@pixiv/three-vrm@2.1.2/lib/three-vrm.module.js"
             }
-          }
-        </script>
-        <script type="module">
-            import * as THREE from 'three';
-            import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-            import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-            import { VRMLoaderPlugin, VRMUtils } from './three-vrm.module.js';
-            import { loadMixamoAnimation } from './loadMixamoAnimation.js';
-            import { loadBirdPanel } from "./js/panel.js";
-            import GUI from 'three/addons/libs/lil-gui.module.min.js';
+        }
+    </script>
+</head>
 
-            const renderer = new THREE.WebGLRenderer();
-            renderer.setSize( window.innerWidth, window.innerHeight );
-            renderer.setPixelRatio( window.devicePixelRatio );
-            document.body.appendChild( renderer.domElement );
+<body>
+    <div id="ui-container">
+        <!-- Device Selection Screen -->
+        <div id="device-selection" class="glass-panel">
+            <h1 class="gradient-text">Virtual Museum</h1>
+            <p class="subtitle">Select your device to enter.</p>
+            <div class="device-buttons">
+                <button id="btn-pc" class="btn btn-primary">Play on PC (Keyboard & Mouse)</button>
+                <button id="btn-mobile" class="btn btn-secondary">Play on Mobile (Touch)</button>
+            </div>
+        </div>
 
-            const camera = new THREE.PerspectiveCamera( 30.0, window.innerWidth / window.innerHeight, 0.1, 20.0 );
-            camera.position.set( 0.0, 1.0, 5.0 );
+        <!-- PC Instructions (Hidden Initially) -->
+        <div id="instructions-pc" class="glass-panel" style="display: none;">
+            <h1 class="gradient-text">Virtual Museum</h1>
+            <p><strong>Click to enter the space</strong></p>
+            <div class="controls-hint">
+                <span>W, A, S, D</span> to Move <br>
+                <span>Mouse</span> to Look <br>
+                <span>Esc</span> to Exit
+            </div>
+        </div>
+    </div>
 
-            const controls = new OrbitControls( camera, renderer.domElement );
-            controls.screenSpacePanning = true;
-            controls.target.set(0.0, 1.0, 0.0 );
-            controls.update();
+    <div id="crosshair" style="display: none;">+</div>
 
-            const scene = new THREE.Scene();
-            loadBirdPanel(scene);
+    <!-- Mobile UI Elements (Hidden Initially) -->
+    <div id="mobile-ui" style="display: none;">
+        <!-- The zone where the joystick will appear -->
+        <div id="joystick-zone"></div>
+        <!-- Right side touch area for looking around -->
+        <div id="look-zone"></div>
+        <button id="btn-exit-mobile">Exit</button>
+    </div>
 
-            const light = new THREE.DirectionalLight( 0xffffff, Math.PI );
-            light.position.set( 1.0, 1.0, 1.0 ).normalize();
-            scene.add( light );
+    <!-- Main Module Script -->
+    <script type="module" src="script.js"></script>
+</body>
 
-            const floor_geometry = new THREE.PlaneGeometry( 20, 12);
-            const floor_material = new THREE.MeshBasicMaterial( {color: 0xaaaaaa, side: THREE.DoubleSide} );
-
-            const floor = new THREE.Mesh( floor_geometry, floor_material );
-            floor.rotation.x = Math.PI / 2;
-            floor.position.y = -0.001;
-            scene.add(floor);
-
-            const geometry = new THREE.PlaneGeometry( 1, 1 );
-            const material = new THREE.MeshBasicMaterial( {color: 0x555555, side: THREE.DoubleSide} );
-
-            for (var i = 0; i < 36; i++) {
-                const plane = new THREE.Mesh( geometry, material );
-                plane.rotation.x = Math.PI / 2;
-                plane.position.x = (i % 6 - 3) * 2;
-                plane.position.z = (i / 6 - 3) * 2;
-                scene.add( plane );
-            }
-
-            const defaultModelUrl = './models/Goi3D.vrm';
-
-            let currentVrm = undefined;
-            let currentAnimationUrl = "./models/idle.fbx";
-            let currentMixer = undefined;
-            let walk_clip = undefined;
-            let idle_clip = undefined;
-
-            function loadVRM( modelUrl ) {
-                const loader = new GLTFLoader();
-                loader.crossOrigin = 'anonymous';
-                loader.register( ( parser ) => {
-                    return new VRMLoaderPlugin( parser, { autoUpdateHumanBones: true } );
-                } );
-                loader.load( modelUrl, ( gltf ) => {
-                        const vrm = gltf.userData.vrm;
-                        currentVrm = vrm;
-                        scene.add( vrm.scene );
-                        vrm.scene.traverse( ( obj ) => {obj.frustumCulled = false;} );
-                        VRMUtils.rotateVRM0( vrm );
-                        loadFBX(currentAnimationUrl);
-                        loadMixamoAnimation( "./models/walk.fbx", currentVrm ).then( ( clip ) => {
-                            walk_clip = clip;
-                            currentMixer.clipAction( walk_clip ).play();
-                            currentMixer.clipAction( walk_clip ).setEffectiveWeight(0);
-                        } );
-                        loadMixamoAnimation( "./models/idle.fbx", currentVrm ).then( ( clip ) => {
-                            idle_clip = clip;
-                            currentMixer.clipAction( idle_clip ).play();
-                            currentMixer.clipAction( idle_clip ).setEffectiveWeight(1);
-                        } );
-                    },
-                    ( progress ) => console.log( 'Loading model...', 100.0 * ( progress.loaded / progress.total ), '%' ),
-                );
-            }
-
-            loadVRM( defaultModelUrl );
-
-            function loadFBX( animationUrl ) {
-                currentAnimationUrl = animationUrl;
-                currentMixer = new THREE.AnimationMixer( currentVrm.scene );
-                loadMixamoAnimation( animationUrl, currentVrm ).then( ( clip ) => {
-                    currentMixer.clipAction( clip ).play();
-                    currentMixer.timeScale = params.timeScale;
-                } );
-            }
-
-            var xSpeed = 1.5;
-            var zSpeed = 1.5;
-
-            document.addEventListener("keydown", onDocumentKeyDown, false);
-            var press_forward  = false;
-            var press_backward = false;
-            var press_left     = false;
-            var press_right    = false;
-            function onDocumentKeyDown(event) {
-                var keyCode = event.which;
-                if (keyCode == 87) {
-                    press_forward = true;
-                    press_backward = false;
-                } else if (keyCode == 83) {
-                    press_forward = false;//true;
-                    press_backward = true;//false;
-                } else if (keyCode == 65) {
-                    press_left = true;
-                    press_right = false;
-                } else if (keyCode == 68) {
-                    press_left = false;//true;
-                    press_right = true;//false;
-                } else if (keyCode == 32) {
-                    currentVrm.position.set(0, 0, 0);
-                    press_forward = false;//true;
-                    press_backward = false;//true;
-                    press_left = false;//true;
-                    press_right = false;//true;
-                }
-                if (press_forward || press_backward || press_left || press_right) {
-                    if (keyCode == 87 || keyCode == 83 || keyCode == 65 || keyCode == 68) {
-                        var next_idle_weight = currentMixer.clipAction( idle_clip ).getEffectiveWeight() - 0.3;
-                        var next_walk_weight = currentMixer.clipAction( walk_clip ).getEffectiveWeight() + 0.3;
-                        if (next_idle_weight < 0) {
-                            next_idle_weight = 0;
-                        }
-                        if (next_walk_weight > 1) {
-                            next_walk_weight = 1;
-                        }
-                        currentMixer.clipAction( idle_clip ).setEffectiveWeight(next_idle_weight);
-                        currentMixer.clipAction( walk_clip ).setEffectiveWeight(next_walk_weight);
-                        currentMixer.timeScale = params.timeScale;
-                    }
-                }
-            };
-
-            document.addEventListener("keyup", onDocumentKeyUp, false);
-            function onDocumentKeyUp(event) {
-                press_forward = false;//true;
-                press_backward = false;//true;
-                press_left = false;//true;
-                press_right = false;//true;
-            }
-
-            const clock = new THREE.Clock();
-            function animate() {
-                requestAnimationFrame( animate );
-                const deltaTime = clock.getDelta();
-                if ( currentMixer && idle_clip && walk_clip) {
-                    if (!(press_forward || press_backward || press_left || press_right)) {
-                        var next_idle_weight = currentMixer.clipAction( idle_clip ).getEffectiveWeight() + 0.1;
-                        var next_walk_weight = currentMixer.clipAction( walk_clip ).getEffectiveWeight() - 0.1;
-                        if (next_idle_weight > 1) {
-                            next_idle_weight = 1;
-                        }
-                        if (next_walk_weight < 0) {
-                            next_walk_weight = 0;
-                        }
-                        currentMixer.clipAction( idle_clip ).setEffectiveWeight(next_idle_weight);
-                        currentMixer.clipAction( walk_clip ).setEffectiveWeight(next_walk_weight);                   
-                    } else if (currentMixer.clipAction( walk_clip ).getEffectiveWeight() < 0.5) {
-                        xSpeed = currentMixer.clipAction( walk_clip ).getEffectiveWeight() * 4.5;
-                        zSpeed = currentMixer.clipAction( walk_clip ).getEffectiveWeight() * 4.5;
-                    } else {
-                        xSpeed = 1.5; 
-                        zSpeed = 1.5;
-                    }
-                    currentMixer.update( deltaTime );
-                }
-                if ( currentVrm ) {
-                    currentVrm.update( deltaTime );
-                    var target_direction = camera.rotation.y;
-                    if (press_forward) {
-                        if (press_left) {
-                            target_direction += 3.14159265358979 * -3 / 4;
-                        } else if (press_right) {
-                            target_direction += 3.14159265358979 * 3 / 4;
-                        } else {
-                            target_direction += 3.14159265358979;
-                        }
-                    } else if (press_backward) {
-                        if (press_left) {
-                            target_direction += -3.14159265358979/4;
-                        } else if (press_right) {
-                            target_direction += 3.14159265358979/4;
-                        } else {
-                            target_direction += 0;
-                        }
-                    } else if (press_left) {
-                        target_direction = -3.1415926535 / 2.0;
-                    } else if (press_right) {
-                        target_direction = 3.1415926535 / 2.0;
-                    }
-                    if (currentVrm.scene.rotation.y - target_direction > 3.1415926535) {
-                        target_direction += 3.14159265358979 * 2;
-                    } else if (currentVrm.scene.rotation.y - target_direction < -3.1415926535) {
-                        target_direction -= 3.14159265358979 * 2
-                    }
-
-                    if (press_forward || press_backward || press_left || press_right) {
-                        currentVrm.scene.rotation.y = (target_direction - currentVrm.scene.rotation.y) * 1 + currentVrm.scene.rotation.y;
-                    }
-
-                    if (press_forward) {
-                        currentVrm.scene.position.x = currentVrm.scene.position.x - zSpeed * Math.sin(camera.rotation.y) * deltaTime;
-                        currentVrm.scene.position.z = currentVrm.scene.position.z - zSpeed * Math.cos(camera.rotation.y) * deltaTime;
-                        camera.position.x = currentVrm.scene.position.x - -5.0 * Math.sin(camera.rotation.y);
-                        camera.position.z = currentVrm.scene.position.z - -5.0 * Math.cos(camera.rotation.y);
-                        currentVrm.scene.position.y = 0;
-                    } else if (press_backward) {
-                        currentVrm.scene.position.x = currentVrm.scene.position.x + zSpeed * Math.sin(camera.rotation.y) * deltaTime;
-                        currentVrm.scene.position.z = currentVrm.scene.position.z + zSpeed * Math.cos(camera.rotation.y) * deltaTime;
-                        //camera.position.x = currentVrm.scene.position.x - -5.0 * Math.sin(camera.rotation.y);
-                        //camera.position.z = currentVrm.scene.position.z - -5.0 * Math.cos(camera.rotation.y);
-                        camera.position.x = currentVrm.scene.position.x - -5.0 * Math.sin(camera.rotation.y);
-                        camera.position.z = currentVrm.scene.position.z - -5.0 * Math.cos(camera.rotation.y);
-                        currentVrm.scene.position.y = 0;
-                    }
-                    if (press_left) {
-                        currentVrm.scene.position.x = currentVrm.scene.position.x - xSpeed * Math.cos(camera.rotation.y) * deltaTime;
-                        currentVrm.scene.position.z = currentVrm.scene.position.z + xSpeed * Math.sin(camera.rotation.y) * deltaTime;
-                        camera.position.x = currentVrm.scene.position.x - -5.0 * Math.sin(camera.rotation.y);
-                        camera.position.z = currentVrm.scene.position.z - -5.0 * Math.cos(camera.rotation.y);
-                        currentVrm.scene.position.y = 0;
-                    } else if (press_right) {
-                        currentVrm.scene.position.x = currentVrm.scene.position.x + xSpeed * Math.cos(camera.rotation.y) * deltaTime;
-                        currentVrm.scene.position.z = currentVrm.scene.position.z - xSpeed * Math.sin(camera.rotation.y) * deltaTime;
-                        camera.position.x = currentVrm.scene.position.x - -5.0 * Math.sin(camera.rotation.y);
-                        camera.position.z = currentVrm.scene.position.z - -5.0 * Math.cos(camera.rotation.y);
-                        currentVrm.scene.position.y = 0;
-                    }
-                }
-                if (currentVrm) {
-                    controls.target.set(currentVrm.scene.position.x,currentVrm.scene.position.y+1.2,currentVrm.scene.position.z);
-                    controls.update();
-                }
-                renderer.render( scene, camera );
-            }
-
-            animate();
-            const gui = new GUI();
-            const params = { timeScale: 1.0 };
-            gui.add( params, 'timeScale', 0.0, 2.0, 0.001 ).onChange( ( value ) => {
-                currentMixer.timeScale = value;
-            } );
-        </script>
-	</body>
 </html>
