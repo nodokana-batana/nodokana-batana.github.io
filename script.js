@@ -27,7 +27,7 @@ let animActions = {};
 let currentAnimName = 'idle';
 
 // Define museum dimensions
-const roomSize = 300;
+const roomSize = 33;
 const wallHeight = 20;
 
 let isMobileMode = false;
@@ -304,100 +304,133 @@ function buildRoom() {
     });
 }
 
+let galleryFrames = [];
+let currentGalleryIndex = 0;
+let lastGalleryUpdateTime = 0;
+const textureLoader = new THREE.TextureLoader();
+
 function build2DGalleryWall() {
-    const textureLoader = new THREE.TextureLoader();
+    const cols = 5;
+    const rows = 2;
+    const framesPerWall = cols * rows; // 10 per wall
+    const totalFrames = Math.min(framesPerWall * 4, imageList.length); // 40 frames max
+    if (totalFrames === 0) return;
 
-    const totalImages = imageList.length;
-    if (totalImages === 0) return;
+    const usableLength = roomSize - 10; // padding from corners
+    const rowHeights = [7, 3]; // top row, bottom row (Y positions)
 
-    // Distribute images evenly across the 4 walls
-    const imagesPerWall = Math.ceil(totalImages / 4);
+    // Wall definitions
+    const wallDefs = [
+        { wallIndex: 0, rotY: 0 },         // North
+        { wallIndex: 1, rotY: -Math.PI / 2 }, // East
+        { wallIndex: 2, rotY: Math.PI },    // South
+        { wallIndex: 3, rotY: Math.PI / 2 }  // West
+    ];
 
-    // Safety margin near corners
-    const usableWallLength = roomSize - 30; // 15 units padding on each side
-    const spacing = usableWallLength / Math.max(1, imagesPerWall - 1);
+    let frameIndex = 0;
+    for (let w = 0; w < 4; w++) {
+        const def = wallDefs[w];
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+                if (frameIndex >= totalFrames) break;
 
-    // Ensure the image frame width never exceeds 85% of available spacing to prevent overlaps
-    const maxImageWidth = spacing * 0.85;
+                const frameGeo = new THREE.BoxGeometry(1, 1, 0.2);
+                const frameMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.5 });
+                const frame = new THREE.Mesh(frameGeo, frameMat);
 
-    imageList.forEach((imgSrc, index) => {
-        textureLoader.load(imgSrc, (texture) => {
-            // Calculate aspect ratio
+                const imgGeo = new THREE.PlaneGeometry(1, 1);
+                const imgMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                const imgPlane = new THREE.Mesh(imgGeo, imgMat);
+
+                imgPlane.position.z = 0.11;
+                frame.add(imgPlane);
+
+                // Horizontal position along the wall
+                const t = (cols === 1) ? 0 : (col / (cols - 1)) * usableLength - usableLength / 2;
+                const posY = rowHeights[row];
+
+                let posX = 0, posZ = 0;
+                if (w === 0) { // North Wall
+                    posX = t;
+                    posZ = -roomSize / 2 + 0.2;
+                } else if (w === 1) { // East Wall
+                    posX = roomSize / 2 - 0.2;
+                    posZ = t;
+                } else if (w === 2) { // South Wall
+                    posX = -t;
+                    posZ = roomSize / 2 - 0.2;
+                } else { // West Wall
+                    posX = -roomSize / 2 + 0.2;
+                    posZ = -t;
+                }
+
+                frame.position.set(posX, posY, posZ);
+                frame.rotation.y = def.rotY;
+                frame.castShadow = true;
+
+                // Spotlight (one per column, only on top row to avoid duplicates)
+                if (row === 0) {
+                    const spotLight = new THREE.SpotLight(0xffffee, 5.0, 20, Math.PI / 4, 0.4, 1);
+                    if (w === 0) spotLight.position.set(posX, 12, posZ + 5);
+                    if (w === 1) spotLight.position.set(posX - 5, 12, posZ);
+                    if (w === 2) spotLight.position.set(posX, 12, posZ - 5);
+                    if (w === 3) spotLight.position.set(posX + 5, 12, posZ);
+                    spotLight.target = frame;
+                    scene.add(spotLight);
+                }
+
+                scene.add(frame);
+                galleryFrames.push({ frame, imgPlane });
+                frameIndex++;
+            }
+        }
+    }
+
+    updateGalleryImages();
+    lastGalleryUpdateTime = performance.now();
+}
+
+function updateGalleryImages() {
+    if (imageList.length === 0 || galleryFrames.length === 0) return;
+    const usableLength = roomSize - 4;
+    const maxImageWidth = (usableLength / 5) * 0.8; // 80% of per-column spacing
+
+    for (let i = 0; i < galleryFrames.length; i++) {
+        let imageSrc = imageList[(currentGalleryIndex + i) % imageList.length];
+
+        textureLoader.load(imageSrc, (texture) => {
+            const frameObj = galleryFrames[i];
             const imgAspect = texture.image.width / texture.image.height;
 
-            let planeHeight = 4.5;
+            let planeHeight = 3.0;
             let planeWidth = planeHeight * imgAspect;
 
-            // Scaledown if it's too wide so they never overlap horizontally
             if (planeWidth > maxImageWidth) {
                 planeWidth = maxImageWidth;
                 planeHeight = planeWidth / imgAspect;
             }
 
-            // Frame geometry
-            const frameGeo = new THREE.BoxGeometry(planeWidth + 0.4, planeHeight + 0.4, 0.2);
-            const frameMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.5 });
-            const frame = new THREE.Mesh(frameGeo, frameMat);
+            // Adjust scale of the geometries based on aspect ratio
+            frameObj.frame.scale.set(planeWidth + 0.4, planeHeight + 0.4, 1);
+            frameObj.imgPlane.scale.set(planeWidth / (planeWidth + 0.4), planeHeight / (planeHeight + 0.4), 1);
 
-            // Image geometry
-            const imgGeo = new THREE.PlaneGeometry(planeWidth, planeHeight);
-            let imgMat;
-            if (imgSrc.toLowerCase().endsWith('.png')) {
-                imgMat = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+            if (frameObj.imgPlane.material.map) {
+                frameObj.imgPlane.material.map.dispose();
+            }
+
+            frameObj.imgPlane.material.map = texture;
+            frameObj.imgPlane.material.needsUpdate = true;
+            if (imageSrc.toLowerCase().endsWith('.png')) {
+                frameObj.imgPlane.material.transparent = true;
             } else {
-                imgMat = new THREE.MeshBasicMaterial({ map: texture });
+                frameObj.imgPlane.material.transparent = false;
             }
-
-            const imgPlane = new THREE.Mesh(imgGeo, imgMat);
-
-            imgPlane.position.z = 0.11; // Slightly in front of frame
-            frame.add(imgPlane);
-
-            // Determine wall and position
-            const wallIndex = Math.floor(index / imagesPerWall);
-            const indexOnWall = index % imagesPerWall;
-            const offset = -(usableWallLength / 2) + (indexOnWall * spacing);
-
-            let posX = 0, posZ = 0, rotY = 0;
-            if (wallIndex === 0) { // North Wall
-                posX = offset;
-                posZ = -roomSize / 2 + 0.2;
-                rotY = 0;
-            } else if (wallIndex === 1) { // East Wall
-                posX = roomSize / 2 - 0.2;
-                posZ = offset;
-                rotY = -Math.PI / 2;
-            } else if (wallIndex === 2) { // South Wall
-                posX = -offset; // reverse direction so it wraps around mathematically
-                posZ = roomSize / 2 - 0.2;
-                rotY = Math.PI;
-            } else { // West Wall
-                posX = -roomSize / 2 + 0.2;
-                posZ = -offset;
-                rotY = Math.PI / 2;
-            }
-
-            // Position on the wall
-            frame.position.set(posX, 5, posZ);
-            frame.rotation.y = rotY;
-            frame.castShadow = true;
-
-            // Spotlight for the painting
-            const spotLight = new THREE.SpotLight(0xffffee, 1.5, 20, Math.PI / 7, 0.6, 1);
-
-            // Position spotlight slightly out from the wall and above
-            if (wallIndex === 0) spotLight.position.set(posX, 10, posZ + 8);
-            if (wallIndex === 1) spotLight.position.set(posX - 8, 10, posZ);
-            if (wallIndex === 2) spotLight.position.set(posX, 10, posZ - 8);
-            if (wallIndex === 3) spotLight.position.set(posX + 8, 10, posZ);
-
-            spotLight.target = frame;
-            scene.add(spotLight);
-            scene.add(frame);
         }, undefined, (err) => {
-            console.error('Error loading texture:', imgSrc, err);
+            console.error('Error loading texture:', imageSrc, err);
         });
-    });
+    }
+
+    currentGalleryIndex = (currentGalleryIndex + galleryFrames.length) % imageList.length;
 }
 
 function build3DExhibition() {
@@ -405,9 +438,9 @@ function build3DExhibition() {
     window.spinningModels = [];
 
     const placements = [
-        { x: -30, z: 0, color: 0xff3366, type: 'crystal' },
-        { x: 0, z: -30, color: 0x00c6ff, type: 'torus' },
-        { x: 30, z: 0, color: 0xccff00, type: 'sphere' }
+        { x: -8, z: 0, color: 0xff3366, type: 'crystal' },
+        { x: 0, z: -8, color: 0x00c6ff, type: 'torus' },
+        { x: 8, z: 0, color: 0xccff00, type: 'sphere' }
     ];
 
     placements.forEach(pos => {
@@ -615,6 +648,14 @@ function animate() {
         if (pos.x > boundary) pos.x = boundary;
         if (pos.z < -boundary) pos.z = -boundary;
         if (pos.z > boundary) pos.z = boundary;
+    }
+
+    // Update 2D Gallery Images every 5 seconds
+    if (time - lastGalleryUpdateTime > 5000) {
+        if (typeof updateGalleryImages === 'function') {
+            updateGalleryImages();
+        }
+        lastGalleryUpdateTime = time;
     }
 
     // Spin the 3D placeholder models
